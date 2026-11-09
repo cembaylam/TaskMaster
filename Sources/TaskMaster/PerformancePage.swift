@@ -40,6 +40,21 @@ struct PerformancePage: View {
 private struct ResourceList: View {
     @Environment(Monitor.self) private var monitor
     @Environment(UIState.self) private var ui
+    @State private var keys = KeyMonitor()
+
+    private var order: [PerfItem] {
+        let s = monitor.snapshot
+        return [.cpu, .memory] + s.disks.map { .disk($0.id) } + s.nets.map { .network($0.bsd) } + [.gpu]
+    }
+
+    private func handleKey(_ code: UInt16) -> Bool {
+        guard code == 125 || code == 126 else { return false }
+        let items = order
+        let d = code == 125 ? 1 : -1
+        let idx = items.firstIndex(of: ui.perf) ?? 0
+        ui.perf = items[min(max(idx + d, 0), items.count - 1)]
+        return true
+    }
 
     var body: some View {
         let s = monitor.snapshot
@@ -59,6 +74,11 @@ private struct ResourceList: View {
                 item(.gpu, "GPU 0", "\(s.gpu.name)\n\(Fmt.percent(s.gpu.utilization))", [monitor.gpuHistory], [.tmGPU], 100)
             }.padding(8)
         }
+        .onAppear {
+            keys.onKey = { code in handleKey(code) }
+            keys.start()
+        }
+        .onDisappear { keys.stop() }
     }
 
     private func item(_ id: PerfItem, _ title: String, _ sub: String, _ series: [[Double]], _ colors: [Color], _ max: Double) -> some View {
