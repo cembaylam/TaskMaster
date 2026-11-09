@@ -19,6 +19,7 @@ struct DataTable<Item: Identifiable, Menu: View>: View where Item.ID == String {
     @Environment(UIState.self) private var ui
     @State private var sortID: String?
     @State private var ascending = true
+    @State private var keys = KeyMonitor()
     @ViewBuilder var menu: (Item) -> Menu
 
     private var sorted: [Item] {
@@ -45,7 +46,28 @@ struct DataTable<Item: Identifiable, Menu: View>: View where Item.ID == String {
         .onChange(of: ui.selectFirstTick) { _, _ in
             if let first = sorted.first { selection.wrappedValue = first.id; proxy.scrollTo(first.id) }
         }
+        .onChange(of: selection.wrappedValue) { _, new in
+            if let new { proxy.scrollTo(new) }
         }
+        }
+        .onAppear {
+            keys.onKey = { code in handleKey(code) }
+            keys.start()
+        }
+        .onDisappear { keys.stop() }
+        .onChange(of: items.map(\.id)) { _, _ in keys.onKey = { code in handleKey(code) } }
+        .onChange(of: sortID) { _, _ in keys.onKey = { code in handleKey(code) } }
+        .onChange(of: ascending) { _, _ in keys.onKey = { code in handleKey(code) } }
+    }
+
+    private func handleKey(_ code: UInt16) -> Bool {
+        guard code == 125 || code == 126 else { return false }
+        let rows = sorted
+        guard !rows.isEmpty else { return false }
+        let d = code == 125 ? 1 : -1
+        let idx = rows.firstIndex { $0.id == selection.wrappedValue } ?? (d > 0 ? -1 : rows.count)
+        selection.wrappedValue = rows[min(max(idx + d, 0), rows.count - 1)].id
+        return true
     }
 
     private var headerView: some View {
